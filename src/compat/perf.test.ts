@@ -31,12 +31,18 @@ type PerfReport = {
     eventSeq: number
     eventState: number
     eventSeen: number
+    eventControlCount: number
+    eventControlChecksum: number
     combineSeq: number
     combineState: number
     combineSeen: number
+    combineControlCount: number
+    combineControlChecksum: number
     arraySeq: number
     arrayState: number
     arraySeen: number
+    arrayControlCount: number
+    arrayControlChecksum: number
   }
 }
 
@@ -191,12 +197,18 @@ function buildBenchmarkSource(multiplier: number) {
     '      eventSeq: eventSeq,',
     '      eventState: eventStore.getState(),',
     '      eventSeen: eventSeen,',
+    '      eventControlCount: eventControlState,',
+    '      eventControlChecksum: eventControlChecksum,',
     '      combineSeq: combineSeq,',
     '      combineState: combineSource.getState(),',
     '      combineSeen: combineSeen,',
+    '      combineControlCount: combineControlA,',
+    '      combineControlChecksum: combineControlChecksum,',
     '      arraySeq: arraySeq,',
     '      arrayState: arrayStore.getState()[0],',
     '      arraySeen: arraySeen,',
+    '      arrayControlCount: arrayControlSeq,',
+    '      arrayControlChecksum: arrayControlChecksum,',
     '    },',
     '  }',
     '}',
@@ -232,6 +244,17 @@ test('performance ratios stay within budget on real devices', async () => {
   expect(report.integrity.combineSeen).toBe(report.integrity.combineSeq + 1)
   expect(report.integrity.arrayState).toBe(report.integrity.arraySeq)
   expect(report.integrity.arraySeen).toBe(report.integrity.arraySeq + 1)
+
+  // Control loops are observable in the remote result, so JITs cannot
+  // discard their bookkeeping as dead code before measuring the ratios.
+  for (const [row, count, checksum] of [
+    [report.rows[0], report.integrity.eventControlCount, report.integrity.eventControlChecksum],
+    [report.rows[1], report.integrity.combineControlCount, report.integrity.combineControlChecksum],
+    [report.rows[2], report.integrity.arrayControlCount, report.integrity.arrayControlChecksum],
+  ] as Array<[PerfRow, number, number]>) {
+    expect(count).toBeGreaterThanOrEqual(row.iterations * 5)
+    expect(Number.isFinite(checksum)).toBe(true)
+  }
 
   const device = deviceName()
   console.log(
